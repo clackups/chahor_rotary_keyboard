@@ -56,6 +56,14 @@ bind_interrupts!(struct Irqs {
     I2C0_IRQ => InterruptHandler<I2C0>;
 });
 
+struct Pins {
+    rotary_pin_a: Input<'static>,
+    rotary_pin_b: Input<'static>,
+    lower_case: Input<'static>,
+    upper_case: Input<'static>,
+    space: Input<'static>,
+}
+
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let p = embassy_rp::init(Default::default());
@@ -72,22 +80,27 @@ fn main() -> ! {
         },
     );
 
-    let rotary_pin_a = Input::new(p.PIN_21, Pull::Up);
-    let rotary_pin_b = Input::new(p.PIN_20, Pull::Up);
+    let pins: Pins = Pins {
+        rotary_pin_a: Input::new(p.PIN_21, Pull::Up),
+        rotary_pin_b: Input::new(p.PIN_20, Pull::Up),
+        lower_case:   Input::new(p.PIN_2, Pull::Up),
+        upper_case:   Input::new(p.PIN_3, Pull::Up),
+        space:        Input::new(p.PIN_4, Pull::Up),
+    };
 
     let executor0 = EXECUTOR0.init(Executor::new());
 
-    executor0.run(|spawner| unwrap!(spawner.spawn(core0_task(rotary_pin_a, rotary_pin_b))));
+    executor0.run(|spawner| unwrap!(spawner.spawn(core0_task(pins))));
 }
 
 // Keyboard task
 
 #[embassy_executor::task]
-async fn core0_task(rotary_pin_a: Input<'static>, rotary_pin_b: Input<'static>) {
+async fn core0_task(pins: Pins) {
     info!("Hello from core 0");
 
-    let mut enc = Rotary::new(rotary_pin_a, rotary_pin_b);
-    let mut keymap_n: usize = 1;
+    let mut enc = Rotary::new(pins.rotary_pin_a, pins.rotary_pin_b);
+    let keymap_n: usize = 1;
     let mut pos: usize = 0;
 
     loop {
@@ -116,11 +129,18 @@ async fn core0_task(rotary_pin_a: Input<'static>, rotary_pin_b: Input<'static>) 
         }
 
         if updated {
-            let mut ks: &symbols::KS = &symbols::KEYMAPS[keymap_n][pos];
+            let ks: &symbols::KS = &symbols::KEYMAPS[keymap_n][pos];
             CHANNEL.send(DisplayMessage::ShowKeyboardSymbol(ks.s)).await;
         }
 
-        Timer::after_millis(2).await;
+        if pins.lower_case.is_low() {
+        }
+        else if pins.upper_case.is_low() {
+        }
+        else if pins.space.is_low() {
+        }
+
+        Timer::after_millis(1).await;
     }
 }
 
