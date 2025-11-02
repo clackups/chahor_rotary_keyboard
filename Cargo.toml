@@ -20,6 +20,7 @@ embedded-hal-async = { version = "1.0.0", features = ["defmt-03"] }
 itoa = { version = "1.0.11", features = ["no-panic"] }
 panic-probe = { version = "0.3.2", features = ["print-defmt"] }
 portable-atomic = { version = "1.8.0", features = ["critical-section"] }
+rotary-encoder-hal = { version = "0.6.0", features = ["table-decoder"] }
 ssd1306 = { version = "0.10.0", features = ["async"] }
 static_cell = "2.1.0"
 u8g2-fonts = "0.7.2"

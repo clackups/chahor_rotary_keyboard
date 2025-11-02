@@ -84,7 +84,7 @@ pub const KEYMAPS: [[KS; 40]; 2] = [
         KS{c: 0x32, s: '\u{044c}'}, // CYRILLIC SMALL LETTER SOFT SIGN
         KS{c: 0x34, s: '\u{044e}'}, // CYRILLIC SMALL LETTER YU
         KS{c: 0x2c, s: '\u{044f}'}, // CYRILLIC SMALL LETTER YA
-        KS{c: 0x29, s: '\u{0451}'}, // CYRILLIC SMALL LETTER IO
+        KS{c: 0, s: '\u{0000}'},
         KS{c: 0, s: '\u{0000}'},
         KS{c: 0, s: '\u{0000}'},
         KS{c: 0, s: '\u{0000}'},

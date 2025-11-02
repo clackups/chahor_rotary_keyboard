@@ -11,11 +11,10 @@
 use defmt::*;
 use embassy_executor::Executor;
 use embassy_rp::bind_interrupts;
-// use embassy_rp::gpio::{Level, Output};
 use embassy_rp::i2c::{self, Async, Config, InterruptHandler};
 use embassy_rp::multicore::{spawn_core1, Stack};
 use embassy_rp::peripherals::{I2C0};
-// use embedded_hal_async::i2c::I2c;
+use embassy_rp::gpio::{Input, Pull};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::{Timer};
@@ -24,6 +23,8 @@ use ssd1306::prelude::DisplayRotation;
 use ssd1306::size::DisplaySize128x64;
 use ssd1306::{I2CDisplayInterface, Ssd1306};
 use static_cell::StaticCell;
+
+use rotary_encoder_hal::{Direction, Rotary};
 
 mod symbols;
 
@@ -61,7 +62,7 @@ fn main() -> ! {
 
     // Set up I2C0 for the SSD1306 OLED Display
     let i2c0 = i2c::I2c::new_async(p.I2C0, p.PIN_9, p.PIN_8, Irqs, Config::default());
-
+    // display task
     spawn_core1(
         p.CORE1,
         unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
@@ -71,25 +72,55 @@ fn main() -> ! {
         },
     );
 
+    let rotary_pin_a = Input::new(p.PIN_21, Pull::Up);
+    let rotary_pin_b = Input::new(p.PIN_20, Pull::Up);
+
     let executor0 = EXECUTOR0.init(Executor::new());
 
-    executor0.run(|spawner| unwrap!(spawner.spawn(core0_task())));
-
+    executor0.run(|spawner| unwrap!(spawner.spawn(core0_task(rotary_pin_a, rotary_pin_b))));
 }
 
 // Keyboard task
 
 #[embassy_executor::task]
-async fn core0_task() {
+async fn core0_task(rotary_pin_a: Input<'static>, rotary_pin_b: Input<'static>) {
     info!("Hello from core 0");
 
+    let mut enc = Rotary::new(rotary_pin_a, rotary_pin_b);
+    let mut keymap_n: usize = 1;
+    let mut pos: usize = 0;
+
     loop {
-        for keymap in &symbols::KEYMAPS[1] {
-            if keymap.c != 0 {
-                CHANNEL.send(DisplayMessage::ShowKeyboardSymbol(keymap.s)).await;
-                Timer::after_millis(1000).await;
+        let mut updated = false;
+        match enc.update().unwrap() {
+            Direction::Clockwise => {
+                pos += 1;
+                if symbols::KEYMAPS[keymap_n][pos].c == 0 || pos >= 40 {
+                    pos = 0;
+                }
+                updated = true;
             }
+            Direction::CounterClockwise => {
+                if pos == 0 {
+                    pos = 39;
+                    while symbols::KEYMAPS[keymap_n][pos].c == 0 {
+                        pos -= 1;
+                    }
+                }
+                else {
+                    pos -= 1;
+                }
+                updated = true;
+            }
+            Direction::None => {}
         }
+
+        if updated {
+            let mut ks: &symbols::KS = &symbols::KEYMAPS[keymap_n][pos];
+            CHANNEL.send(DisplayMessage::ShowKeyboardSymbol(ks.s)).await;
+        }
+
+        Timer::after_millis(2).await;
     }
 }
 
