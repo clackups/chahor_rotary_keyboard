@@ -1,0 +1,122 @@
+// This example shows how to use a SSD1306 OLED display via I2C to display text
+// GPIO4/5 used for this (I2C0 default pins)
+//
+// Core 0 does measurements and communicates via a CHANNEL to Core 1
+// Core 1 does display/LED I/O
+
+#![no_std]
+#![no_main]
+
+
+use defmt::*;
+use embassy_executor::Executor;
+use embassy_rp::bind_interrupts;
+// use embassy_rp::gpio::{Level, Output};
+use embassy_rp::i2c::{self, Async, Config, InterruptHandler};
+use embassy_rp::multicore::{spawn_core1, Stack};
+use embassy_rp::peripherals::{I2C0};
+// use embedded_hal_async::i2c::I2c;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Channel;
+use embassy_time::{Timer};
+use ssd1306::mode::DisplayConfig;
+use ssd1306::prelude::DisplayRotation;
+use ssd1306::size::DisplaySize128x64;
+use ssd1306::{I2CDisplayInterface, Ssd1306};
+use static_cell::StaticCell;
+
+use embedded_graphics::{
+    pixelcolor::BinaryColor,
+    prelude::*,
+};
+
+use u8g2_fonts::{
+    fonts,
+    types::{FontColor, VerticalPosition},
+    FontRenderer,
+};
+
+static ABETKA:&str = "абвгдєежзік";
+
+use {defmt_rtt as _, panic_probe as _};
+
+static mut CORE1_STACK: Stack<4096> = Stack::new();
+static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
+static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
+static CHANNEL: Channel<CriticalSectionRawMutex, DisplayMessage, 1> = Channel::new();
+
+enum DisplayMessage {
+    KeyboardSymbol(char)
+}
+
+bind_interrupts!(struct Irqs {
+    I2C0_IRQ => InterruptHandler<I2C0>;
+});
+
+#[cortex_m_rt::entry]
+fn main() -> ! {
+    let p = embassy_rp::init(Default::default());
+
+    // Set up I2C0 for the SSD1306 OLED Display
+    let i2c0 = i2c::I2c::new_async(p.I2C0, p.PIN_9, p.PIN_8, Irqs, Config::default());
+
+    spawn_core1(
+        p.CORE1,
+        unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
+        move || {
+            let executor1 = EXECUTOR1.init(Executor::new());
+            executor1.run(|spawner| unwrap!(spawner.spawn(core1_task(i2c0))));
+        },
+    );
+
+    let executor0 = EXECUTOR0.init(Executor::new());
+
+    executor0.run(|spawner| unwrap!(spawner.spawn(core0_task())));
+
+}
+
+// This task measures
+
+#[embassy_executor::task]
+async fn core0_task() {
+    info!("Hello from core 0");
+
+    loop {
+        for c in ABETKA.chars() {
+            CHANNEL.send(DisplayMessage::KeyboardSymbol(c)).await;
+            Timer::after_millis(1000).await;
+        }
+    }
+}
+
+
+#[embassy_executor::task]
+async fn core1_task(i2c0: embassy_rp::i2c::I2c<'static, I2C0, Async>) {
+    info!("Hello from core 1");
+
+    let interface = I2CDisplayInterface::new(i2c0);
+    let mut display =
+        Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0).into_buffered_graphics_mode();
+    display.init().unwrap();
+
+    let font = FontRenderer::new::<fonts::u8g2_font_inr24_t_cyrillic>();
+
+    loop {
+        match CHANNEL.receive().await {
+            DisplayMessage::KeyboardSymbol(c) => {
+                info!("c={}", c);
+
+                display.clear(BinaryColor::Off).unwrap();
+                font.render(
+                    c,
+                    Point::new(16, 38),
+                    VerticalPosition::Baseline,
+                    FontColor::Transparent(BinaryColor::On),
+                    &mut display,
+                ).unwrap();
+
+                display.flush().unwrap();
+            }
+        }
+    }
+}
