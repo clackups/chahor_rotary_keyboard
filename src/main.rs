@@ -25,6 +25,8 @@ use ssd1306::size::DisplaySize128x64;
 use ssd1306::{I2CDisplayInterface, Ssd1306};
 use static_cell::StaticCell;
 
+mod symbols;
+
 use embedded_graphics::{
     pixelcolor::BinaryColor,
     prelude::*,
@@ -36,7 +38,6 @@ use u8g2_fonts::{
     FontRenderer,
 };
 
-static ABETKA:&str = "абвгдєежзік";
 
 use {defmt_rtt as _, panic_probe as _};
 
@@ -45,8 +46,9 @@ static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
 static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 static CHANNEL: Channel<CriticalSectionRawMutex, DisplayMessage, 1> = Channel::new();
 
+
 enum DisplayMessage {
-    KeyboardSymbol(char)
+    ShowKeyboardSymbol(char)
 }
 
 bind_interrupts!(struct Irqs {
@@ -75,20 +77,23 @@ fn main() -> ! {
 
 }
 
-// This task measures
+// Keyboard task
 
 #[embassy_executor::task]
 async fn core0_task() {
     info!("Hello from core 0");
 
     loop {
-        for c in ABETKA.chars() {
-            CHANNEL.send(DisplayMessage::KeyboardSymbol(c)).await;
-            Timer::after_millis(1000).await;
+        for keymap in &symbols::KEYMAPS[1] {
+            if keymap.c != 0 {
+                CHANNEL.send(DisplayMessage::ShowKeyboardSymbol(keymap.s)).await;
+                Timer::after_millis(1000).await;
+            }
         }
     }
 }
 
+// Displaying task
 
 #[embassy_executor::task]
 async fn core1_task(i2c0: embassy_rp::i2c::I2c<'static, I2C0, Async>) {
@@ -103,13 +108,13 @@ async fn core1_task(i2c0: embassy_rp::i2c::I2c<'static, I2C0, Async>) {
 
     loop {
         match CHANNEL.receive().await {
-            DisplayMessage::KeyboardSymbol(c) => {
+            DisplayMessage::ShowKeyboardSymbol(c) => {
                 info!("c={}", c);
 
                 display.clear(BinaryColor::Off).unwrap();
                 font.render(
                     c,
-                    Point::new(16, 38),
+                    Point::new(56, 38),
                     VerticalPosition::Baseline,
                     FontColor::Transparent(BinaryColor::On),
                     &mut display,
