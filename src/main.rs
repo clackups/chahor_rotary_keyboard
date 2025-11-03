@@ -9,9 +9,9 @@
 
 
 use defmt::*;
-use embassy_executor::Executor;
+use embassy_executor::{Executor, Spawner};
 use embassy_rp::bind_interrupts;
-use embassy_rp::i2c::{self, Async, Config, InterruptHandler};
+use embassy_rp::i2c::{self, Async, Config};
 use embassy_rp::multicore::{spawn_core1, Stack};
 use embassy_rp::peripherals::{I2C0};
 use embassy_rp::gpio::{Input, Pull};
@@ -27,6 +27,15 @@ use static_cell::StaticCell;
 use rotary_encoder_hal::{Direction, Rotary};
 
 mod symbols;
+
+
+mod usb_keyboard;
+use crate::usb_keyboard::{UsbKeyboard, UsbKeyboardRequestHandler};
+use embassy_rp::peripherals::USB;
+use embassy_rp::usb::{Driver};
+use embassy_usb::UsbDevice;
+use embassy_usb::class::hid::{HidReader, HidWriter};
+use usbd_hid::descriptor::{KeyboardReport, KeyboardUsage};
 
 use embedded_graphics::{
     pixelcolor::BinaryColor,
@@ -46,6 +55,7 @@ static mut CORE1_STACK: Stack<4096> = Stack::new();
 static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
 static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 static CHANNEL: Channel<CriticalSectionRawMutex, DisplayMessage, 20> = Channel::new();
+static USB_KEYBOARD_CONFIG: StaticCell<usb_keyboard::Config> = StaticCell::new();
 
 
 enum DisplayMessage {
@@ -53,7 +63,8 @@ enum DisplayMessage {
 }
 
 bind_interrupts!(struct Irqs {
-    I2C0_IRQ => InterruptHandler<I2C0>;
+    I2C0_IRQ => i2c::InterruptHandler<I2C0>;
+    USBCTRL_IRQ => embassy_rp::usb::InterruptHandler<USB>;
 });
 
 struct Pins {
@@ -80,6 +91,11 @@ fn main() -> ! {
         },
     );
 
+    info!("Create USB keyboard device");
+    let usb_driver = Driver::new(p.USB, Irqs);
+    let usb_keyboard_config = USB_KEYBOARD_CONFIG.init(usb_keyboard::Config::new());
+    let usb_keyboard = UsbKeyboard::new(usb_keyboard_config, usb_driver);
+
     let pins: Pins = Pins {
         rotary_pin_a: Input::new(p.PIN_21, Pull::Up),
         rotary_pin_b: Input::new(p.PIN_20, Pull::Up),
@@ -89,19 +105,41 @@ fn main() -> ! {
     };
 
     let executor0 = EXECUTOR0.init(Executor::new());
-
-    executor0.run(|spawner| unwrap!(spawner.spawn(core0_task(pins))));
+    executor0.run(|spawner| {
+        spawner.spawn(usb_run(usb_keyboard.usb)).unwrap();
+        spawner.spawn(hid_read(usb_keyboard.hid_reader, usb_keyboard.request_handler)).unwrap();
+        spawner.spawn(core0_task(pins, usb_keyboard.hid_writer)).unwrap();
+    });
 }
+
+
+#[embassy_executor::task]
+async fn usb_run(mut usb: UsbDevice<'static, Driver<'static, USB>>) {
+    info!("Start 'USB Run' task");
+    usb.run().await;
+}
+
+#[embassy_executor::task]
+async fn hid_read(
+    hid_reader: HidReader<'static, Driver<'static, USB>, 1>,
+    request_handler: &'static mut UsbKeyboardRequestHandler,
+) {
+    info!("Start 'HID Read' task");
+    hid_reader.run(false, request_handler).await;
+}
+
 
 // Keyboard task
 
 #[embassy_executor::task]
-async fn core0_task(pins: Pins) {
-    // info!("Hello from core 0");
+async fn core0_task(pins: Pins,
+                    mut hid_writer: HidWriter<'static, Driver<'static, USB>, 8>) {
+    info!("Hello from core 0");
 
     let mut enc = Rotary::new(pins.rotary_pin_a, pins.rotary_pin_b);
     let keymap_n: usize = 1;
     let mut pos: usize = 0;
+    let mut ks: &symbols::KS = &symbols::KEYMAPS[keymap_n][pos];
     let mut updated = true;
 
     loop {
@@ -129,14 +167,58 @@ async fn core0_task(pins: Pins) {
         }
 
         if updated {
-            let ks: &symbols::KS = &symbols::KEYMAPS[keymap_n][pos];
+            ks = &symbols::KEYMAPS[keymap_n][pos];
             CHANNEL.send(DisplayMessage::ShowChar(ks.s)).await;
             updated = false;
         }
 
         if pins.lower_case.is_low() {
+            let report = KeyboardReport {
+                keycodes: [ks.c, 0, 0, 0, 0, 0],
+                leds: 0,
+                modifier: 0,
+                reserved: 0,
+            };
+            match hid_writer.write_serialize(&report).await {
+                Ok(()) => {}
+                Err(e) => warn!("Failed to send report: {:?}", e),
+            };
+
+            // Send an empty report
+            let report = KeyboardReport {
+                keycodes: [0, 0, 0, 0, 0, 0],
+                leds: 0,
+                modifier: 0,
+                reserved: 0,
+            };
+            match hid_writer.write_serialize(&report).await {
+                Ok(()) => {}
+                Err(e) => warn!("Failed to send report: {:?}", e),
+            };
         }
         else if pins.upper_case.is_low() {
+            let report = KeyboardReport {
+                keycodes: [ks.c, 0, 0, 0, 0, 0],
+                leds: 0,
+                modifier: 0b0000_0010,
+                reserved: 0,
+            };
+            match hid_writer.write_serialize(&report).await {
+                Ok(()) => {}
+                Err(e) => warn!("Failed to send report: {:?}", e),
+            };
+
+            // Send an empty report
+            let report = KeyboardReport {
+                keycodes: [0, 0, 0, 0, 0, 0],
+                leds: 0,
+                modifier: 0,
+                reserved: 0,
+            };
+            match hid_writer.write_serialize(&report).await {
+                Ok(()) => {}
+                Err(e) => warn!("Failed to send report: {:?}", e),
+            };
         }
         else if pins.space.is_low() {
         }
@@ -145,11 +227,13 @@ async fn core0_task(pins: Pins) {
     }
 }
 
+
+
 // Displaying task
 
 #[embassy_executor::task]
 async fn core1_task(i2c0: embassy_rp::i2c::I2c<'static, I2C0, Async>) {
-    // info!("Hello from core 1");
+    info!("Hello from core 1");
 
     let interface = I2CDisplayInterface::new(i2c0);
     let mut display =
