@@ -1,7 +1,7 @@
 // Keyboard Symbols
 pub struct KS {
-    pub c: u8,
-    pub s: char,
+    pub c: u8,    // Keyboard scan code
+    pub s: char,  // Unicode character to display
 }
 
 

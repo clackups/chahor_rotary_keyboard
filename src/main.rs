@@ -45,11 +45,11 @@ use {defmt_rtt as _, panic_probe as _};
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
 static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
-static CHANNEL: Channel<CriticalSectionRawMutex, DisplayMessage, 1> = Channel::new();
+static CHANNEL: Channel<CriticalSectionRawMutex, DisplayMessage, 20> = Channel::new();
 
 
 enum DisplayMessage {
-    ShowKeyboardSymbol(char)
+    ShowChar(char)
 }
 
 bind_interrupts!(struct Irqs {
@@ -97,14 +97,14 @@ fn main() -> ! {
 
 #[embassy_executor::task]
 async fn core0_task(pins: Pins) {
-    info!("Hello from core 0");
+    // info!("Hello from core 0");
 
     let mut enc = Rotary::new(pins.rotary_pin_a, pins.rotary_pin_b);
     let keymap_n: usize = 1;
     let mut pos: usize = 0;
+    let mut updated = true;
 
     loop {
-        let mut updated = false;
         match enc.update().unwrap() {
             Direction::Clockwise => {
                 pos += 1;
@@ -130,7 +130,8 @@ async fn core0_task(pins: Pins) {
 
         if updated {
             let ks: &symbols::KS = &symbols::KEYMAPS[keymap_n][pos];
-            CHANNEL.send(DisplayMessage::ShowKeyboardSymbol(ks.s)).await;
+            CHANNEL.send(DisplayMessage::ShowChar(ks.s)).await;
+            updated = false;
         }
 
         if pins.lower_case.is_low() {
@@ -148,25 +149,32 @@ async fn core0_task(pins: Pins) {
 
 #[embassy_executor::task]
 async fn core1_task(i2c0: embassy_rp::i2c::I2c<'static, I2C0, Async>) {
-    info!("Hello from core 1");
+    // info!("Hello from core 1");
 
     let interface = I2CDisplayInterface::new(i2c0);
     let mut display =
         Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0).into_buffered_graphics_mode();
     display.init().unwrap();
+    display.clear(BinaryColor::Off).unwrap();
+    display.flush().unwrap();
 
-    let font = FontRenderer::new::<fonts::u8g2_font_inr24_t_cyrillic>();
+    // Width: 33, Height: 64
+    let font = FontRenderer::new::<fonts::u8g2_font_inr42_t_cyrillic>();
 
     loop {
-        match CHANNEL.receive().await {
-            DisplayMessage::ShowKeyboardSymbol(c) => {
-                info!("c={}", c);
+        let _ = CHANNEL.ready_to_receive().await;
+        while CHANNEL.len() > 1 {
+            let _ = CHANNEL.receive().await;
+        }
 
+        match CHANNEL.receive().await {
+            DisplayMessage::ShowChar(c) => {
+                // info!("c={}", c);
                 display.clear(BinaryColor::Off).unwrap();
                 font.render(
                     c,
-                    Point::new(56, 38),
-                    VerticalPosition::Baseline,
+                    Point::new(64-33/2, 0),
+                    VerticalPosition::Top,
                     FontColor::Transparent(BinaryColor::On),
                     &mut display,
                 ).unwrap();
