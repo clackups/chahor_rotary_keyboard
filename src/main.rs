@@ -9,7 +9,7 @@
 
 
 use defmt::*;
-use embassy_executor::{Executor, Spawner};
+use embassy_executor::{Executor};
 use embassy_rp::bind_interrupts;
 use embassy_rp::i2c::{self, Async, Config};
 use embassy_rp::multicore::{spawn_core1, Stack};
@@ -26,8 +26,8 @@ use static_cell::StaticCell;
 
 use rotary_encoder_hal::{Direction, Rotary};
 
-mod symbols;
-
+mod keymaps;
+use keymaps::KEYMAPS;
 
 mod usb_keyboard;
 use crate::usb_keyboard::{UsbKeyboard, UsbKeyboardRequestHandler};
@@ -35,7 +35,8 @@ use embassy_rp::peripherals::USB;
 use embassy_rp::usb::{Driver};
 use embassy_usb::UsbDevice;
 use embassy_usb::class::hid::{HidReader, HidWriter};
-use usbd_hid::descriptor::{KeyboardReport, KeyboardUsage};
+use usbd_hid::descriptor::{KeyboardReport};
+use usbd_hid::descriptor::KeyboardUsage as KU;
 
 use embedded_graphics::{
     pixelcolor::BinaryColor,
@@ -139,22 +140,25 @@ async fn core0_task(pins: Pins,
     let mut enc = Rotary::new(pins.rotary_pin_a, pins.rotary_pin_b);
     let keymap_n: usize = 1;
     let mut pos: usize = 0;
-    let mut ks: &symbols::KS = &symbols::KEYMAPS[keymap_n][pos];
+    let mut ks: &keymaps::KS = &KEYMAPS[keymap_n][pos];
     let mut updated = true;
+    let mut button_released = true;
 
     loop {
         match enc.update().unwrap() {
             Direction::Clockwise => {
+                info!("Clockwise");
                 pos += 1;
-                if symbols::KEYMAPS[keymap_n][pos].c == 0 || pos >= 40 {
+                if KEYMAPS[keymap_n][pos].c == KU::KeyboardErrorUndefined || pos >= 40 {
                     pos = 0;
                 }
                 updated = true;
             }
             Direction::CounterClockwise => {
+                info!("CounterClockwise");
                 if pos == 0 {
                     pos = 39;
-                    while symbols::KEYMAPS[keymap_n][pos].c == 0 {
+                    while KEYMAPS[keymap_n][pos].c == KU::KeyboardErrorUndefined {
                         pos -= 1;
                     }
                 }
@@ -163,64 +167,70 @@ async fn core0_task(pins: Pins,
                 }
                 updated = true;
             }
-            Direction::None => {}
+            Direction::None => {
+            }
         }
 
         if updated {
-            ks = &symbols::KEYMAPS[keymap_n][pos];
+            ks = &KEYMAPS[keymap_n][pos];
             CHANNEL.send(DisplayMessage::ShowChar(ks.s)).await;
             updated = false;
         }
 
-        if pins.lower_case.is_low() {
-            let report = KeyboardReport {
-                keycodes: [ks.c, 0, 0, 0, 0, 0],
-                leds: 0,
-                modifier: 0,
-                reserved: 0,
-            };
-            match hid_writer.write_serialize(&report).await {
-                Ok(()) => {}
-                Err(e) => warn!("Failed to send report: {:?}", e),
-            };
+        let mut report = KeyboardReport {
+            leds: 0,
+            modifier: 0,
+            reserved: 0,
+            keycodes: [0, 0, 0, 0, 0, 0],
+        };
 
-            // Send an empty report
-            let report = KeyboardReport {
-                keycodes: [0, 0, 0, 0, 0, 0],
-                leds: 0,
-                modifier: 0,
-                reserved: 0,
-            };
-            match hid_writer.write_serialize(&report).await {
-                Ok(()) => {}
-                Err(e) => warn!("Failed to send report: {:?}", e),
-            };
+        let mut button_down = false;
+
+        if pins.lower_case.is_low() {
+            report.keycodes[0] = ks.c as u8;
+            button_down = true;
         }
         else if pins.upper_case.is_low() {
-            let report = KeyboardReport {
-                keycodes: [ks.c, 0, 0, 0, 0, 0],
-                leds: 0,
-                modifier: 0b0000_0010,
-                reserved: 0,
-            };
+            report.keycodes[0] = ks.c as u8;
+            report.modifier = 0b0000_0010;
+            button_down = true;
+        }
+        else if pins.space.is_low() {
+            report.keycodes[0] = KU::KeyboardSpacebar as u8;
+            button_down = true;
+        }
+
+        let mut send_report = false;
+
+        if button_released {
+            if button_down {
+                send_report = true;
+                button_released = false;
+            }
+        }
+        else {
+            if !button_down {
+                button_released = true;
+            }
+        }
+
+        if send_report {
             match hid_writer.write_serialize(&report).await {
                 Ok(()) => {}
                 Err(e) => warn!("Failed to send report: {:?}", e),
-            };
+            }
 
-            // Send an empty report
-            let report = KeyboardReport {
-                keycodes: [0, 0, 0, 0, 0, 0],
+            // send Key Release report
+            report = KeyboardReport {
                 leds: 0,
                 modifier: 0,
                 reserved: 0,
+                keycodes: [0, 0, 0, 0, 0, 0],
             };
             match hid_writer.write_serialize(&report).await {
                 Ok(()) => {}
                 Err(e) => warn!("Failed to send report: {:?}", e),
-            };
-        }
-        else if pins.space.is_low() {
+            }
         }
 
         Timer::after_millis(1).await;
