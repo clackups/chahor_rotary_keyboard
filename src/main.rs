@@ -25,6 +25,7 @@ use ssd1306::{I2CDisplayInterface, Ssd1306};
 use static_cell::StaticCell;
 
 use rotary_encoder_hal::{Direction, Rotary};
+const ROTARY_SCALE_FACTOR: i32 = 4;
 
 mod keymaps;
 use keymaps::KEYMAPS;
@@ -139,9 +140,10 @@ async fn core0_task(pins: Pins,
     debug!("Hello from core 0");
 
     let mut enc = Rotary::new(pins.rotary_pin_a, pins.rotary_pin_b);
+    let mut enc_pos: i32 = 0;
     let keymap_n: usize = 1;
-    let mut pos: usize = 0;
-    let mut ks: &keymaps::KS = &KEYMAPS[keymap_n][pos];
+    let mut keymap_pos: usize = 0;
+    let mut ks: &keymaps::KS = &KEYMAPS[keymap_n][keymap_pos];
     let mut updated = true;
     let mut button_released = true;
     let mut maybe_long_press = false;
@@ -151,32 +153,38 @@ async fn core0_task(pins: Pins,
     loop {
         match enc.update().unwrap() {
             Direction::Clockwise => {
-                debug!("Clockwise");
-                pos += 1;
-                if KEYMAPS[keymap_n][pos].c == KU::KeyboardErrorUndefined || pos >= 40 {
-                    pos = 0;
+                enc_pos += 1;
+                if enc_pos >= ROTARY_SCALE_FACTOR {
+                    enc_pos = 0;
+                    keymap_pos += 1;
+                    if KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined || keymap_pos >= 40 {
+                        keymap_pos = 0;
+                    }
+                    updated = true;
                 }
-                updated = true;
             }
             Direction::CounterClockwise => {
-                debug!("CounterClockwise");
-                if pos == 0 {
-                    pos = 39;
-                    while KEYMAPS[keymap_n][pos].c == KU::KeyboardErrorUndefined {
-                        pos -= 1;
+                enc_pos -= 1;
+                if enc_pos <= ROTARY_SCALE_FACTOR * -1 {
+                    enc_pos = 0;
+                    if keymap_pos == 0 {
+                        keymap_pos = 39;
+                        while KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
+                            keymap_pos -= 1;
+                        }
                     }
+                    else {
+                        keymap_pos -= 1;
+                    }
+                    updated = true;
                 }
-                else {
-                    pos -= 1;
-                }
-                updated = true;
             }
             Direction::None => {
             }
         }
 
         if updated {
-            ks = &KEYMAPS[keymap_n][pos];
+            ks = &KEYMAPS[keymap_n][keymap_pos];
             if ks.c == KU::KeyboardErrorRollOver {
                 let ksc = &keymaps::COMPLEX_KEYMAPS[ks.s as usize];
                 CHANNEL.send(DisplayMessage::ShowChars(ksc.display_str)).await;
