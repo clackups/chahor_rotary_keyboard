@@ -1,10 +1,10 @@
 use usbd_hid::descriptor::KeyboardUsage as KU;
 
-
 // Keyboard Symbols
+// KU::KeyboardErrorRollOver indicates a reference to COMPLEX_KEYMAPS, s is treatted as integer
 pub struct KS {
     pub c: KU,    // Keyboard scan code
-    pub s: char,  // Unicode character to display
+    pub s: char,  // Unicode symbol to display
 }
 
 
@@ -58,7 +58,7 @@ pub const KEYMAPS: [[KS; 40]; 2] = [
         KS{c: KU::KeyboardCommaLess, s: '\u{0431}'}, // CYRILLIC SMALL LETTER BE
         KS{c: KU::KeyboardDd, s: '\u{0432}'}, // CYRILLIC SMALL LETTER VE
         KS{c: KU::KeyboardUu, s: '\u{0433}'}, // CYRILLIC SMALL LETTER GHE
-        KS{c: KU::KeyboardNonUSSlash, s: '\u{0491}'}, // CYRILLIC SMALL LETTER GHE WITH UPTURN
+        KS{c: KU::KeyboardErrorRollOver, s: 0 as char}, // CYRILLIC SMALL LETTER GHE WITH UPTURN
         KS{c: KU::KeyboardLl, s: '\u{0434}'}, // CYRILLIC SMALL LETTER DE
         KS{c: KU::KeyboardTt, s: '\u{0435}'}, // CYRILLIC SMALL LETTER IE
         KS{c: KU::KeyboardSingleDoubleQuote, s: '\u{0454}'}, // CYRILLIC SMALL LETTER UKRAINIAN IE
@@ -95,4 +95,21 @@ pub const KEYMAPS: [[KS; 40]; 2] = [
         KS{c: KU::KeyboardErrorUndefined, s: '\u{0000}'},
         KS{c: KU::KeyboardErrorUndefined, s: '\u{0000}'},
     ],
+];
+
+
+// Complex Keyboard Symbols
+pub struct KSComplex {
+    pub display_str: [char; 3],       // up to 3 characters to display 
+    pub keycodes: [(u8, [KU;3]); 3],  // up to 3 (modifier, keycodes) tuples
+}
+
+
+pub const COMPLEX_KEYMAPS: [KSComplex; 1] = [
+    // 0: RightAlt+U -> CYRILLIC SMALL LETTER GHE WITH UPTURN
+    KSComplex {display_str: ['\u{0491}', '\u{0000}', '\u{0000}'],
+               keycodes: [(0b0100_0000, [KU::KeyboardUu, KU::KeyboardErrorUndefined, KU::KeyboardErrorUndefined]),
+                          (0b0000_0000, [KU::KeyboardErrorUndefined, KU::KeyboardErrorUndefined, KU::KeyboardErrorUndefined]),
+                          (0b0000_0000, [KU::KeyboardErrorUndefined, KU::KeyboardErrorUndefined, KU::KeyboardErrorUndefined]),
+               ]},
 ];

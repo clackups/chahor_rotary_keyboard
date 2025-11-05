@@ -17,7 +17,7 @@ use embassy_rp::peripherals::{I2C0};
 use embassy_rp::gpio::{Input, Pull};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_time::{Timer};
+use embassy_time::{Timer, Instant};
 use ssd1306::mode::DisplayConfig;
 use ssd1306::prelude::DisplayRotation;
 use ssd1306::size::DisplaySize128x64;
@@ -60,7 +60,8 @@ static USB_KEYBOARD_CONFIG: StaticCell<usb_keyboard::Config> = StaticCell::new()
 
 
 enum DisplayMessage {
-    ShowChar(char)
+    ShowChar(char),
+    ShowChars([char; 3]),
 }
 
 bind_interrupts!(struct Irqs {
@@ -92,7 +93,7 @@ fn main() -> ! {
         },
     );
 
-    info!("Create USB keyboard device");
+    debug!("Create USB keyboard device");
     let usb_driver = Driver::new(p.USB, Irqs);
     let usb_keyboard_config = USB_KEYBOARD_CONFIG.init(usb_keyboard::Config::new());
     let usb_keyboard = UsbKeyboard::new(usb_keyboard_config, usb_driver);
@@ -116,7 +117,7 @@ fn main() -> ! {
 
 #[embassy_executor::task]
 async fn usb_run(mut usb: UsbDevice<'static, Driver<'static, USB>>) {
-    info!("Start 'USB Run' task");
+    debug!("Start 'USB Run' task");
     usb.run().await;
 }
 
@@ -125,7 +126,7 @@ async fn hid_read(
     hid_reader: HidReader<'static, Driver<'static, USB>, 1>,
     request_handler: &'static mut UsbKeyboardRequestHandler,
 ) {
-    info!("Start 'HID Read' task");
+    debug!("Start 'HID Read' task");
     hid_reader.run(false, request_handler).await;
 }
 
@@ -135,7 +136,7 @@ async fn hid_read(
 #[embassy_executor::task]
 async fn core0_task(pins: Pins,
                     mut hid_writer: HidWriter<'static, Driver<'static, USB>, 8>) {
-    info!("Hello from core 0");
+    debug!("Hello from core 0");
 
     let mut enc = Rotary::new(pins.rotary_pin_a, pins.rotary_pin_b);
     let keymap_n: usize = 1;
@@ -143,11 +144,14 @@ async fn core0_task(pins: Pins,
     let mut ks: &keymaps::KS = &KEYMAPS[keymap_n][pos];
     let mut updated = true;
     let mut button_released = true;
+    let mut maybe_long_press = false;
+    let mut long_press_start = Instant::now();
+    let mut special_ks = KU::KeyboardErrorUndefined;
 
     loop {
         match enc.update().unwrap() {
             Direction::Clockwise => {
-                info!("Clockwise");
+                debug!("Clockwise");
                 pos += 1;
                 if KEYMAPS[keymap_n][pos].c == KU::KeyboardErrorUndefined || pos >= 40 {
                     pos = 0;
@@ -155,7 +159,7 @@ async fn core0_task(pins: Pins,
                 updated = true;
             }
             Direction::CounterClockwise => {
-                info!("CounterClockwise");
+                debug!("CounterClockwise");
                 if pos == 0 {
                     pos = 39;
                     while KEYMAPS[keymap_n][pos].c == KU::KeyboardErrorUndefined {
@@ -173,64 +177,132 @@ async fn core0_task(pins: Pins,
 
         if updated {
             ks = &KEYMAPS[keymap_n][pos];
-            CHANNEL.send(DisplayMessage::ShowChar(ks.s)).await;
+            if ks.c == KU::KeyboardErrorRollOver {
+                let ksc = &keymaps::COMPLEX_KEYMAPS[ks.s as usize];
+                CHANNEL.send(DisplayMessage::ShowChars(ksc.display_str)).await;
+            }
+            else {
+                CHANNEL.send(DisplayMessage::ShowChar(ks.s)).await;
+            }
             updated = false;
         }
 
-        let mut report = KeyboardReport {
-            leds: 0,
-            modifier: 0,
-            reserved: 0,
-            keycodes: [0, 0, 0, 0, 0, 0],
-        };
-
         let mut button_down = false;
+        let mut long_press_button_down = false;
+        let mut send_letter = false;
+        let mut with_shift = false;
+        let mut send_special_ks = false;
 
         if pins.lower_case.is_low() {
-            report.keycodes[0] = ks.c as u8;
+            send_letter = true;
             button_down = true;
         }
         else if pins.upper_case.is_low() {
-            report.keycodes[0] = ks.c as u8;
-            report.modifier = 0b0000_0010;
+            send_letter = true;
+            with_shift = true;
             button_down = true;
         }
         else if pins.space.is_low() {
-            report.keycodes[0] = KU::KeyboardSpacebar as u8;
+            special_ks = KU::KeyboardSpacebar;
             button_down = true;
+            long_press_button_down = true;
         }
 
         let mut send_report = false;
 
         if button_released {
             if button_down {
-                send_report = true;
                 button_released = false;
+                if long_press_button_down {
+                    maybe_long_press = true;
+                    long_press_start = Instant::now();
+                }
+                else {
+                    send_report = true;
+                }
             }
         }
         else {
-            if !button_down {
+            if button_down {
+                if maybe_long_press {
+                    if long_press_start.elapsed().as_millis() >= 1000 {
+                        if special_ks == KU::KeyboardSpacebar { // long press on spacebar produces enter
+                            send_report = true;
+                            send_special_ks = true;
+                            special_ks = KU::KeyboardEnter;
+                            maybe_long_press = false;
+                        }
+                    }
+                }
+            }
+            else {
                 button_released = true;
+                if maybe_long_press {
+                    send_report = true;
+                    send_special_ks = true;
+                    maybe_long_press = false;
+                }
             }
         }
 
         if send_report {
-            match hid_writer.write_serialize(&report).await {
-                Ok(()) => {}
-                Err(e) => warn!("Failed to send report: {:?}", e),
+            if send_letter {
+                if ks.c == KU::KeyboardErrorRollOver {
+                    let ksc = &keymaps::COMPLEX_KEYMAPS[ks.s as usize];
+                    for key in ksc.keycodes {
+                        if key.1[0] != KU::KeyboardErrorUndefined {
+                            let mut report = KeyboardReport {
+                                leds: 0,
+                                modifier: key.0,
+                                reserved: 0,
+                                keycodes: [0, 0, 0, 0, 0, 0],
+                            };
+                            if with_shift {
+                                report.modifier |= 0b0000_0010;
+                            }
+                            let mut pos = 0;
+                            for keycode in key.1 {
+                                if keycode != KU::KeyboardErrorUndefined {
+                                    report.keycodes[pos] = keycode as u8;
+                                }
+                                pos += 1;
+                            }
+                            send_report_to_writer(&mut hid_writer, &report).await;
+                        }
+                    }
+                }
+                else {
+                    let mut report = KeyboardReport {
+                        leds: 0,
+                        modifier: 0,
+                        reserved: 0,
+                        keycodes: [0, 0, 0, 0, 0, 0],
+                    };
+                    report.keycodes[0] = ks.c as u8;
+                    if with_shift {
+                        report.modifier = 0b0000_0010;
+                    }
+                    send_report_to_writer(&mut hid_writer, &report).await;
+                }
+            }
+            else if send_special_ks {
+                let report = KeyboardReport {
+                    leds: 0,
+                    modifier: 0,
+                    reserved: 0,
+                    keycodes: [special_ks as u8, 0, 0, 0, 0, 0],
+                };
+                send_report_to_writer(&mut hid_writer, &report).await;
             }
 
             // send Key Release report
-            report = KeyboardReport {
+            let report = KeyboardReport {
                 leds: 0,
                 modifier: 0,
                 reserved: 0,
                 keycodes: [0, 0, 0, 0, 0, 0],
             };
-            match hid_writer.write_serialize(&report).await {
-                Ok(()) => {}
-                Err(e) => warn!("Failed to send report: {:?}", e),
-            }
+            send_report_to_writer(&mut hid_writer, &report).await;
         }
 
         Timer::after_millis(1).await;
@@ -238,12 +310,22 @@ async fn core0_task(pins: Pins,
 }
 
 
+async fn send_report_to_writer(hid_writer: &mut HidWriter<'static, Driver<'static, USB>, 8>,
+               report: &KeyboardReport) {
+    match hid_writer.write_serialize(report).await {
+        Ok(()) => {}
+        Err(e) => warn!("Failed to send report: {:?}", e),
+    }
+}
+
+
 
 // Displaying task
+const CHARWIDTH: i32 = 33;
 
 #[embassy_executor::task]
 async fn core1_task(i2c0: embassy_rp::i2c::I2c<'static, I2C0, Async>) {
-    info!("Hello from core 1");
+    debug!("Hello from core 1");
 
     let interface = I2CDisplayInterface::new(i2c0);
     let mut display =
@@ -263,16 +345,38 @@ async fn core1_task(i2c0: embassy_rp::i2c::I2c<'static, I2C0, Async>) {
 
         match CHANNEL.receive().await {
             DisplayMessage::ShowChar(c) => {
-                // info!("c={}", c);
+                // debug!("c={}", c);
                 display.clear(BinaryColor::Off).unwrap();
                 font.render(
                     c,
-                    Point::new(64-33/2, 0),
+                    Point::new(64-CHARWIDTH/2, 0),
                     VerticalPosition::Top,
                     FontColor::Transparent(BinaryColor::On),
                     &mut display,
                 ).unwrap();
-
+                display.flush().unwrap();
+            },
+            DisplayMessage::ShowChars(cc) => {
+                let mut stringlen = 0;
+                for c in cc {
+                    if c as u16 != 0 {
+                        stringlen += 1;
+                    }
+                }
+                display.clear(BinaryColor::Off).unwrap();
+                let mut pos = 0;
+                for c in cc {
+                    if c as u16 != 0 {
+                        font.render(
+                            c,
+                            Point::new(64-CHARWIDTH*stringlen/2 + pos*CHARWIDTH, 0),
+                            VerticalPosition::Top,
+                            FontColor::Transparent(BinaryColor::On),
+                            &mut display,
+                        ).unwrap();
+                        pos += 1;
+                    }
+                }
                 display.flush().unwrap();
             }
         }
