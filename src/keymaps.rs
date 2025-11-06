@@ -8,7 +8,7 @@ pub struct KS {
 }
 
 
-pub const KEYMAPS: [[KS; 40]; 3] = [
+pub const KEYMAPS: [[KS; 40]; 4] = [
     // ASCII letters a-z
     [
         KS{c: KU::KeyboardAa, s: ['a', '\u{0000}', '\u{0000}']},
@@ -138,12 +138,55 @@ pub const KEYMAPS: [[KS; 40]; 3] = [
         KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
         KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
     ],
+    // F keys
+    [
+        KS{c: KU::KeyboardF1, s: ['F', '1', '\u{0000}']},
+        KS{c: KU::KeyboardF2, s: ['F', '2', '\u{0000}']},
+        KS{c: KU::KeyboardF3, s: ['F', '3', '\u{0000}']},
+        KS{c: KU::KeyboardF4, s: ['F', '4', '\u{0000}']},
+        KS{c: KU::KeyboardF5, s: ['F', '5', '\u{0000}']},
+        KS{c: KU::KeyboardF6, s: ['F', '6', '\u{0000}']},
+        KS{c: KU::KeyboardF7, s: ['F', '7', '\u{0000}']},
+        KS{c: KU::KeyboardF8, s: ['F', '8', '\u{0000}']},
+        KS{c: KU::KeyboardF9, s: ['F', '9', '\u{0000}']},
+        KS{c: KU::KeyboardF10, s: ['F', '1', '0']},
+        KS{c: KU::KeyboardF11, s: ['F', '1', '1']},
+        KS{c: KU::KeyboardF12, s: ['F', '1', '2']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+        KS{c: KU::KeyboardErrorUndefined, s: ['\u{0000}', '\u{0000}', '\u{0000}']},
+    ],
 ];
 
 
 // Complex Keyboard Symbols
 pub struct KSComplex {
-    pub display_str: [char; 3],       // up to 3 characters to display 
+    pub display_str: [char; 3],       // up to 3 characters to display
     pub keycodes: [(u8, [KU;2]); 2],  // up to 2 (modifier, keycodes) tuples
 }
 
