@@ -76,6 +76,7 @@ struct Pins {
     upper_case: Input<'static>,
     space: Input<'static>,
     bcksp: Input<'static>,
+    ctrl: Input<'static>,
     switch: Input<'static>,
 }
 
@@ -107,7 +108,8 @@ fn main() -> ! {
         upper_case:   Input::new(p.PIN_3, Pull::Up),
         space:        Input::new(p.PIN_4, Pull::Up),
         bcksp:        Input::new(p.PIN_5, Pull::Up),
-        switch:        Input::new(p.PIN_7, Pull::Up),
+        ctrl:         Input::new(p.PIN_6, Pull::Up),
+        switch:       Input::new(p.PIN_7, Pull::Up),
     };
 
     let executor0 = EXECUTOR0.init(Executor::new());
@@ -152,6 +154,8 @@ async fn core0_task(pins: Pins,
     let mut maybe_long_press = false;
     let mut long_press_start = Instant::now();
     let mut special_ks = KU::KeyboardErrorUndefined;
+    let mut with_ctrl = false;
+    let mut with_alt = false;
 
     loop {
         // if switching between keymaps landed on the null key, move back to the last symbol
@@ -211,6 +215,7 @@ async fn core0_task(pins: Pins,
         let mut special_ks_button_down = false;
         let mut send_special_ks = false;
         let mut switch_pressed = false;
+        let mut ctrl_button_down = false;
 
         if pins.lower_case.is_low() {
             send_letter = true;
@@ -231,6 +236,11 @@ async fn core0_task(pins: Pins,
             special_ks_button_down = true;
             button_down = true;
         }
+        else if pins.ctrl.is_low() {
+            long_press_button_down = true;
+            ctrl_button_down = true;
+            button_down = true;
+        }
         else if pins.switch.is_low() {
             switch_pressed = true;
             button_down = true;
@@ -244,6 +254,10 @@ async fn core0_task(pins: Pins,
                 if long_press_button_down {
                     maybe_long_press = true;
                     long_press_start = Instant::now();
+                    if ctrl_button_down {
+                        debug!("ctrl_button_down");
+                        with_ctrl = true;
+                    }
                 }
                 else if switch_pressed {
                     keymap_n += 1;
@@ -271,20 +285,32 @@ async fn core0_task(pins: Pins,
                             special_ks = KU::KeyboardEnter;
                             maybe_long_press = false;
                         }
+                        else if with_ctrl {
+                            with_ctrl = false;
+                            with_alt = true;
+                            send_letter = true;
+                            send_report = true;
+                        }
                     }
                 }
             }
             else {
                 button_released = true;
                 if maybe_long_press {
+                    if special_ks == KU::KeyboardSpacebar {
+                        send_special_ks = true;
+                    }
+                    else if with_ctrl {
+                        send_letter = true;
+                    }
                     send_report = true;
-                    send_special_ks = true;
                     maybe_long_press = false;
                 }
             }
         }
 
         if send_report {
+            debug!("send_report");
             if send_letter {
                 if ks.c == KU::KeyboardErrorRollOver {
                     let ksc = &keymaps::COMPLEX_KEYMAPS[ks.s[0] as usize];
@@ -298,6 +324,17 @@ async fn core0_task(pins: Pins,
                             };
                             if with_shift {
                                 report.modifier |= 0b0000_0010;
+                                debug!("shift");
+                            }
+                            if with_ctrl {
+                                report.modifier |= 0b0000_0001;
+                                with_ctrl = false;
+                                debug!("ctrl");
+                            }
+                            if with_alt {
+                                report.modifier |= 0b0000_0100;
+                                with_alt = false;
+                                debug!("alt");
                             }
                             let mut pos = 0;
                             for keycode in key.1 {
@@ -320,6 +357,17 @@ async fn core0_task(pins: Pins,
                     report.keycodes[0] = ks.c as u8;
                     if with_shift {
                         report.modifier = 0b0000_0010;
+                        debug!("shift");
+                    }
+                    if with_ctrl {
+                        report.modifier |= 0b0000_0001;
+                        with_ctrl = false;
+                        debug!("ctrl");
+                    }
+                    if with_alt {
+                        report.modifier |= 0b0000_0100;
+                        with_alt = false;
+                        debug!("alt");
                     }
                     send_report_to_writer(&mut hid_writer, &report).await;
                 }
