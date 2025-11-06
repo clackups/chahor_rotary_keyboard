@@ -25,7 +25,7 @@ use ssd1306::{I2CDisplayInterface, Ssd1306};
 use static_cell::StaticCell;
 
 use rotary_encoder_hal::{Direction, Rotary};
-const ROTARY_SCALE_FACTOR: i32 = 4;
+const ROTARY_SCALE_FACTOR: i32 = 3;
 
 mod keymaps;
 use keymaps::KEYMAPS;
@@ -263,6 +263,23 @@ async fn core0_task(pins: Pins,
                     keymap_n += 1;
                     if keymap_n >= KEYMAPS.len() {
                         keymap_n = 0;
+                    }
+
+                    if keymaps::KEYMAP_PRELUDES[keymap_n].0 {
+                        let mut report = KeyboardReport {
+                            leds: 0,
+                            modifier: keymaps::KEYMAP_PRELUDES[keymap_n].1,
+                            reserved: 0,
+                            keycodes: [keymaps::KEYMAP_PRELUDES[keymap_n].2 as u8, 0, 0, 0, 0, 0],
+                        };
+                        send_report_to_writer(&mut hid_writer, &report).await;
+                        report = KeyboardReport {
+                            leds: 0,
+                            modifier: 0,
+                            reserved: 0,
+                            keycodes: [0, 0, 0, 0, 0, 0],
+                        };
+                        send_report_to_writer(&mut hid_writer, &report).await;
                     }
                     updated = true;
                 }

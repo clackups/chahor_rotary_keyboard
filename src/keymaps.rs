@@ -303,3 +303,13 @@ pub const COMPLEX_KEYMAPS: [KSComplex; 22] = [
                           (0b0000_0000, [KU::KeyboardErrorUndefined, KU::KeyboardErrorUndefined]),
                ]},
 ];
+
+
+// scancode to send after switching to a keymap:
+// true if need to send it, modifiers, scancode
+pub const KEYMAP_PRELUDES: [(bool, u8, KU); 4] = [
+    (true, 0b0000_0011, KU::Keyboard1Exclamation),  // US English: Ctrl+Shift+1
+    (true, 0b0000_0011, KU::Keyboard4Dollar),       // Ukrainian:  Ctrl+Shift+4
+    (true, 0b0000_0011, KU::Keyboard1Exclamation),  // US English digits and symbols: Ctrl+Shift+1
+    (false, 0b0000_0000, KU::KeyboardErrorUndefined),  // F keys
+];
