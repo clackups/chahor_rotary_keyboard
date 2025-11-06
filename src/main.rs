@@ -61,7 +61,6 @@ static USB_KEYBOARD_CONFIG: StaticCell<usb_keyboard::Config> = StaticCell::new()
 
 
 enum DisplayMessage {
-    ShowChar(char),
     ShowChars([char; 3]),
 }
 
@@ -76,6 +75,8 @@ struct Pins {
     lower_case: Input<'static>,
     upper_case: Input<'static>,
     space: Input<'static>,
+    bcksp: Input<'static>,
+    switch: Input<'static>,
 }
 
 #[cortex_m_rt::entry]
@@ -105,6 +106,8 @@ fn main() -> ! {
         lower_case:   Input::new(p.PIN_2, Pull::Up),
         upper_case:   Input::new(p.PIN_3, Pull::Up),
         space:        Input::new(p.PIN_4, Pull::Up),
+        bcksp:        Input::new(p.PIN_5, Pull::Up),
+        switch:        Input::new(p.PIN_7, Pull::Up),
     };
 
     let executor0 = EXECUTOR0.init(Executor::new());
@@ -141,7 +144,7 @@ async fn core0_task(pins: Pins,
 
     let mut enc = Rotary::new(pins.rotary_pin_a, pins.rotary_pin_b);
     let mut enc_pos: i32 = 0;
-    let keymap_n: usize = 1;
+    let mut keymap_n: usize = 0;
     let mut keymap_pos: usize = 0;
     let mut ks: &keymaps::KS = &KEYMAPS[keymap_n][keymap_pos];
     let mut updated = true;
@@ -151,6 +154,12 @@ async fn core0_task(pins: Pins,
     let mut special_ks = KU::KeyboardErrorUndefined;
 
     loop {
+        // if switching between keymaps landed on the null key, move back to the last symbol
+        if KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
+            while KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
+                keymap_pos -= 1;
+            }
+        }
         match enc.update().unwrap() {
             Direction::Clockwise => {
                 enc_pos += 1;
@@ -186,11 +195,11 @@ async fn core0_task(pins: Pins,
         if updated {
             ks = &KEYMAPS[keymap_n][keymap_pos];
             if ks.c == KU::KeyboardErrorRollOver {
-                let ksc = &keymaps::COMPLEX_KEYMAPS[ks.s as usize];
+                let ksc = &keymaps::COMPLEX_KEYMAPS[ks.s[0] as usize];
                 CHANNEL.send(DisplayMessage::ShowChars(ksc.display_str)).await;
             }
             else {
-                CHANNEL.send(DisplayMessage::ShowChar(ks.s)).await;
+                CHANNEL.send(DisplayMessage::ShowChars(ks.s)).await;
             }
             updated = false;
         }
@@ -199,7 +208,9 @@ async fn core0_task(pins: Pins,
         let mut long_press_button_down = false;
         let mut send_letter = false;
         let mut with_shift = false;
+        let mut special_ks_button_down = false;
         let mut send_special_ks = false;
+        let mut switch_pressed = false;
 
         if pins.lower_case.is_low() {
             send_letter = true;
@@ -215,6 +226,15 @@ async fn core0_task(pins: Pins,
             button_down = true;
             long_press_button_down = true;
         }
+        else if pins.bcksp.is_low() {
+            special_ks = KU::KeyboardBackspace;
+            special_ks_button_down = true;
+            button_down = true;
+        }
+        else if pins.switch.is_low() {
+            switch_pressed = true;
+            button_down = true;
+        }
 
         let mut send_report = false;
 
@@ -224,6 +244,17 @@ async fn core0_task(pins: Pins,
                 if long_press_button_down {
                     maybe_long_press = true;
                     long_press_start = Instant::now();
+                }
+                else if switch_pressed {
+                    keymap_n += 1;
+                    if keymap_n >= KEYMAPS.len() {
+                        keymap_n = 0;
+                    }
+                    updated = true;
+                }
+                else if special_ks_button_down {
+                    send_report = true;
+                    send_special_ks = true;
                 }
                 else {
                     send_report = true;
@@ -256,7 +287,7 @@ async fn core0_task(pins: Pins,
         if send_report {
             if send_letter {
                 if ks.c == KU::KeyboardErrorRollOver {
-                    let ksc = &keymaps::COMPLEX_KEYMAPS[ks.s as usize];
+                    let ksc = &keymaps::COMPLEX_KEYMAPS[ks.s[0] as usize];
                     for key in ksc.keycodes {
                         if key.1[0] != KU::KeyboardErrorUndefined {
                             let mut report = KeyboardReport {
@@ -352,18 +383,6 @@ async fn core1_task(i2c0: embassy_rp::i2c::I2c<'static, I2C0, Async>) {
         }
 
         match CHANNEL.receive().await {
-            DisplayMessage::ShowChar(c) => {
-                // debug!("c={}", c);
-                display.clear(BinaryColor::Off).unwrap();
-                font.render(
-                    c,
-                    Point::new(64-CHARWIDTH/2, 0),
-                    VerticalPosition::Top,
-                    FontColor::Transparent(BinaryColor::On),
-                    &mut display,
-                ).unwrap();
-                display.flush().unwrap();
-            },
             DisplayMessage::ShowChars(cc) => {
                 let mut stringlen = 0;
                 for c in cc {
