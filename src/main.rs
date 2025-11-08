@@ -72,6 +72,8 @@ bind_interrupts!(struct Irqs {
 struct Pins {
     rotary_pin_a: Input<'static>,
     rotary_pin_b: Input<'static>,
+    navi_up: Input<'static>,
+    navi_down: Input<'static>,
     lower_case: Input<'static>,
     upper_case: Input<'static>,
     space: Input<'static>,
@@ -104,6 +106,8 @@ fn main() -> ! {
     let pins: Pins = Pins {
         rotary_pin_a: Input::new(p.PIN_21, Pull::Up),
         rotary_pin_b: Input::new(p.PIN_20, Pull::Up),
+        navi_up:      Input::new(p.PIN_18, Pull::Up),
+        navi_down:    Input::new(p.PIN_19, Pull::Up),
         lower_case:   Input::new(p.PIN_2, Pull::Up),
         upper_case:   Input::new(p.PIN_3, Pull::Up),
         space:        Input::new(p.PIN_4, Pull::Up),
@@ -146,6 +150,9 @@ async fn core0_task(pins: Pins,
 
     let mut enc = Rotary::new(pins.rotary_pin_a, pins.rotary_pin_b);
     let mut enc_pos: i32 = 0;
+    let mut navi_updown: i32 = 0;
+    let mut navi_button_pressed: i32 = 0;
+    let mut navi_long_press_time = Instant::now();
     let mut keymap_n: usize = 0;
     let mut keymap_pos: usize = 0;
     let mut ks: &keymaps::KS = &KEYMAPS[keymap_n][keymap_pos];
@@ -158,21 +165,14 @@ async fn core0_task(pins: Pins,
     let mut with_alt = false;
 
     loop {
-        // if switching between keymaps landed on the null key, move back to the last symbol
-        if KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
-            while KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
-                keymap_pos -= 1;
-            }
-        }
+        let mut keymap_delta: i32 = 0;
+
         match enc.update().unwrap() {
             Direction::Clockwise => {
                 enc_pos += 1;
                 if enc_pos >= ROTARY_SCALE_FACTOR {
                     enc_pos = 0;
-                    keymap_pos += 1;
-                    if KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined || keymap_pos >= 40 {
-                        keymap_pos = 0;
-                    }
+                    keymap_delta = 1;
                     updated = true;
                 }
             }
@@ -180,15 +180,7 @@ async fn core0_task(pins: Pins,
                 enc_pos -= 1;
                 if enc_pos <= ROTARY_SCALE_FACTOR * -1 {
                     enc_pos = 0;
-                    if keymap_pos == 0 {
-                        keymap_pos = 39;
-                        while KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
-                            keymap_pos -= 1;
-                        }
-                    }
-                    else {
-                        keymap_pos -= 1;
-                    }
+                    keymap_delta = -1;
                     updated = true;
                 }
             }
@@ -196,7 +188,31 @@ async fn core0_task(pins: Pins,
             }
         }
 
+        if navi_updown != 0 {
+            keymap_delta = navi_updown;
+            navi_updown = 0;
+            updated = true;
+        }
+
         if updated {
+            if keymap_delta > 0 {
+                keymap_pos += keymap_delta as usize;
+                if keymap_pos >= 40 || KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
+                    keymap_pos = 0;
+                }
+            }
+            else if keymap_delta < 0 {
+                if keymap_pos == 0 {
+                    keymap_pos = 39;
+                    while KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
+                        keymap_pos -= 1;
+                    }
+                }
+                else {
+                    keymap_pos -= (keymap_delta * -1) as usize;
+                }
+            }
+
             ks = &KEYMAPS[keymap_n][keymap_pos];
             if ks.c == KU::KeyboardErrorRollOver {
                 let ksc = &keymaps::COMPLEX_KEYMAPS[ks.s[0] as usize];
@@ -217,6 +233,16 @@ async fn core0_task(pins: Pins,
         let mut switch_pressed = false;
         let mut ctrl_button_down = false;
 
+        if pins.navi_up.is_low() {
+            long_press_button_down = true;
+            navi_button_pressed = 1;
+            button_down = true;
+        }
+        if pins.navi_down.is_low() {
+            long_press_button_down = true;
+            navi_button_pressed = -1;
+            button_down = true;
+        }
         if pins.lower_case.is_low() {
             send_letter = true;
             button_down = true;
@@ -265,6 +291,13 @@ async fn core0_task(pins: Pins,
                         keymap_n = 0;
                     }
 
+                    // if switching between keymaps landed on the null key, move back to the last symbol
+                    if KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
+                        while KEYMAPS[keymap_n][keymap_pos].c == KU::KeyboardErrorUndefined {
+                            keymap_pos -= 1;
+                        }
+                    }
+
                     if keymaps::KEYMAP_PRELUDES[keymap_n].0 {
                         let mut report = KeyboardReport {
                             leds: 0,
@@ -308,6 +341,12 @@ async fn core0_task(pins: Pins,
                             send_letter = true;
                             send_report = true;
                         }
+                        else if navi_button_pressed != 0 {
+                            if navi_long_press_time.elapsed().as_millis() >= 300 {
+                                navi_long_press_time = Instant::now();
+                                navi_updown = navi_button_pressed;
+                            }
+                        }
                     }
                 }
             }
@@ -316,11 +355,16 @@ async fn core0_task(pins: Pins,
                 if maybe_long_press {
                     if special_ks == KU::KeyboardSpacebar {
                         send_special_ks = true;
+                        send_report = true;
                     }
                     else if with_ctrl {
                         send_letter = true;
+                        send_report = true;
                     }
-                    send_report = true;
+                    else if navi_button_pressed != 0 {
+                        navi_updown = navi_button_pressed;
+                        navi_button_pressed = 0;
+                    }
                     maybe_long_press = false;
                 }
             }
