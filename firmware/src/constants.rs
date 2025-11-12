@@ -1,0 +1,3 @@
+pub const ROTARY_SCALE_FACTOR: i32 = 3;
+pub const LONG_PRESS_INTERVAL_MS: u64 = 1000;
+pub const NAVI_REPEAT_PERIOD_MS: u64 = 300;

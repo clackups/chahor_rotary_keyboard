@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+mod constants;
+use constants::*;
 
 use defmt::*;
 use embassy_executor::{Executor};
@@ -19,7 +21,6 @@ use ssd1306::{I2CDisplayInterface, Ssd1306};
 use static_cell::StaticCell;
 
 use rotary_encoder_hal::{Direction, Rotary};
-const ROTARY_SCALE_FACTOR: i32 = 3;
 
 mod keymaps;
 use keymaps::KEYMAPS;
@@ -134,7 +135,7 @@ async fn core0_task(rotary_enc: RotaryEncResources, buttons: ButtonResources,
     let mut enc_pos: i32 = 0;
     let mut navi_updown: i32 = 0;
     let mut navi_button_pressed: i32 = 0;
-    let mut navi_long_press_time = Instant::now();
+    let mut navi_repeat_timer = Instant::now();
     let mut keymap_n: usize = 0;
     let mut keymap_pos: usize = 0;
     let mut ks: &keymaps::KS = &KEYMAPS[keymap_n][keymap_pos];
@@ -310,7 +311,7 @@ async fn core0_task(rotary_enc: RotaryEncResources, buttons: ButtonResources,
         else {
             if button_down {
                 if maybe_long_press {
-                    if long_press_start.elapsed().as_millis() >= 1000 {
+                    if long_press_start.elapsed().as_millis() >= LONG_PRESS_INTERVAL_MS {
                         if special_ks == KU::KeyboardSpacebar { // long press on spacebar produces enter
                             send_report = true;
                             send_special_ks = true;
@@ -324,8 +325,8 @@ async fn core0_task(rotary_enc: RotaryEncResources, buttons: ButtonResources,
                             send_report = true;
                         }
                         else if navi_button_pressed != 0 {
-                            if navi_long_press_time.elapsed().as_millis() >= 300 {
-                                navi_long_press_time = Instant::now();
+                            if navi_repeat_timer.elapsed().as_millis() >= NAVI_REPEAT_PERIOD_MS {
+                                navi_repeat_timer = Instant::now();
                                 navi_updown = navi_button_pressed;
                             }
                         }
