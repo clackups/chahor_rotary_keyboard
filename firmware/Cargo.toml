@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+assign-resources = "0.5.0"
 cortex-m = { version = "0.7.7", features = ["critical-section", "inline-asm"] }
 cortex-m-rt = "0.7.5"
 critical-section = "1.2.0"
@@ -26,6 +27,9 @@ ssd1306 = { version = "0.10.0", features = ["async"] }
 static_cell = "2.1.1"
 u8g2-fonts = "0.7.2"
 usbd-hid = "0.8.2"
+
+[features]
+chahor_v1 = []
 
 [profile.release]
 debug = 2

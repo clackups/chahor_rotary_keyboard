@@ -1,9 +1,3 @@
-// This example shows how to use a SSD1306 OLED display via I2C to display text
-// GPIO4/5 used for this (I2C0 default pins)
-//
-// Core 0 does measurements and communicates via a CHANNEL to Core 1
-// Core 1 does display/LED I/O
-
 #![no_std]
 #![no_main]
 
@@ -50,6 +44,9 @@ use u8g2_fonts::{
     FontRenderer,
 };
 
+mod boards;
+use boards::*;
+
 
 use {defmt_rtt as _, panic_probe as _};
 
@@ -69,25 +66,14 @@ bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => embassy_rp::usb::InterruptHandler<USB>;
 });
 
-struct Pins {
-    rotary_pin_a: Input<'static>,
-    rotary_pin_b: Input<'static>,
-    navi_up: Input<'static>,
-    navi_down: Input<'static>,
-    lower_case: Input<'static>,
-    upper_case: Input<'static>,
-    space: Input<'static>,
-    bcksp: Input<'static>,
-    ctrl: Input<'static>,
-    switch: Input<'static>,
-}
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let p = embassy_rp::init(Default::default());
+    let r = split_resources!(p);
 
     // Set up I2C0 for the SSD1306 OLED Display
-    let i2c0 = i2c::I2c::new_async(p.I2C0, p.PIN_9, p.PIN_8, Irqs, Config::default());
+    let i2c0 = i2c::I2c::new_async(r.screen.peri, r.screen.scl, r.screen.sda, Irqs, Config::default());
     // display task
     spawn_core1(
         p.CORE1,
@@ -103,24 +89,11 @@ fn main() -> ! {
     let usb_keyboard_config = USB_KEYBOARD_CONFIG.init(usb_keyboard::Config::new());
     let usb_keyboard = UsbKeyboard::new(usb_keyboard_config, usb_driver);
 
-    let pins: Pins = Pins {
-        rotary_pin_a: Input::new(p.PIN_21, Pull::Up),
-        rotary_pin_b: Input::new(p.PIN_20, Pull::Up),
-        navi_up:      Input::new(p.PIN_18, Pull::Up),
-        navi_down:    Input::new(p.PIN_19, Pull::Up),
-        lower_case:   Input::new(p.PIN_2, Pull::Up),
-        upper_case:   Input::new(p.PIN_3, Pull::Up),
-        space:        Input::new(p.PIN_4, Pull::Up),
-        bcksp:        Input::new(p.PIN_5, Pull::Up),
-        ctrl:         Input::new(p.PIN_6, Pull::Up),
-        switch:       Input::new(p.PIN_7, Pull::Up),
-    };
-
     let executor0 = EXECUTOR0.init(Executor::new());
     executor0.run(|spawner| {
         spawner.spawn(usb_run(usb_keyboard.usb)).unwrap();
         spawner.spawn(hid_read(usb_keyboard.hid_reader, usb_keyboard.request_handler)).unwrap();
-        spawner.spawn(core0_task(pins, usb_keyboard.hid_writer)).unwrap();
+        spawner.spawn(core0_task(r.rotary_enc, r.buttons, usb_keyboard.hid_writer)).unwrap();
     });
 }
 
@@ -144,11 +117,20 @@ async fn hid_read(
 // Keyboard task
 
 #[embassy_executor::task]
-async fn core0_task(pins: Pins,
+async fn core0_task(rotary_enc: RotaryEncResources, buttons: ButtonResources,
                     mut hid_writer: HidWriter<'static, Driver<'static, USB>, 8>) {
     debug!("Hello from core 0");
 
-    let mut enc = Rotary::new(pins.rotary_pin_a, pins.rotary_pin_b);
+    let mut enc = Rotary::new(Input::new(rotary_enc.pin_a, Pull::Up), Input::new(rotary_enc.pin_b, Pull::Up));
+    let navi_up = Input::new(buttons.navi_up, Pull::Up);
+    let navi_down = Input::new(buttons.navi_down, Pull::Up);
+    let lower_case = Input::new(buttons.lower_case, Pull::Up);
+    let upper_case = Input::new(buttons.upper_case, Pull::Up);
+    let space = Input::new(buttons.space, Pull::Up);
+    let bcksp = Input::new(buttons.bcksp, Pull::Up);
+    let ctrl = Input::new(buttons.ctrl, Pull::Up);
+    let switch = Input::new(buttons.switch, Pull::Up);
+
     let mut enc_pos: i32 = 0;
     let mut navi_updown: i32 = 0;
     let mut navi_button_pressed: i32 = 0;
@@ -233,41 +215,41 @@ async fn core0_task(pins: Pins,
         let mut switch_pressed = false;
         let mut ctrl_button_down = false;
 
-        if pins.navi_up.is_low() {
+        if navi_up.is_low() {
             long_press_button_down = true;
             navi_button_pressed = 1;
             button_down = true;
         }
-        if pins.navi_down.is_low() {
+        if navi_down.is_low() {
             long_press_button_down = true;
             navi_button_pressed = -1;
             button_down = true;
         }
-        if pins.lower_case.is_low() {
+        if lower_case.is_low() {
             send_letter = true;
             button_down = true;
         }
-        else if pins.upper_case.is_low() {
+        else if upper_case.is_low() {
             send_letter = true;
             with_shift = true;
             button_down = true;
         }
-        else if pins.space.is_low() {
+        else if space.is_low() {
             special_ks = KU::KeyboardSpacebar;
             button_down = true;
             long_press_button_down = true;
         }
-        else if pins.bcksp.is_low() {
+        else if bcksp.is_low() {
             special_ks = KU::KeyboardBackspace;
             special_ks_button_down = true;
             button_down = true;
         }
-        else if pins.ctrl.is_low() {
+        else if ctrl.is_low() {
             long_press_button_down = true;
             ctrl_button_down = true;
             button_down = true;
         }
-        else if pins.switch.is_low() {
+        else if switch.is_low() {
             switch_pressed = true;
             button_down = true;
         }
