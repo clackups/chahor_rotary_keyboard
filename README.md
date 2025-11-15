@@ -1,5 +1,5 @@
-Chahor, an experimental keyboard for a cerebral palsy user
-==========================================================
+Chahor, an experimental keyboard for a user with cerebral palsy
+===============================================================
 
 This is an experimental keyboard aiming to improve the typing speed
 for a PC user with cerebral palsy.
