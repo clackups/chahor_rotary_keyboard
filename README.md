@@ -19,6 +19,8 @@ encoder wheel, or by pressing the navigation buttons. Then, by
 pressing one of the text entry keys, the required symbol is sent to
 the computer.
 
+A small OLED screen shows the current letter or symbol that is ready
+to send to the computer.
 
 The keyboard has currently 4 symbol layers:
 
