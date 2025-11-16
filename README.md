@@ -54,6 +54,57 @@ The two navigation keys complement the rotary encoder and allow moving
 forward and back along the alphabet. On a long press, the alphabet is
 scrolled automatically at 3 letters per second.
 
+
+Switching between languages
+---------------------------
+
+The firmware is preprogrammed with the following combinations for
+language switching:
+
+* US English: `Ctrl+Shift+1`
+* Ukrainian:  `Ctrl+Shift+4`
+
+These combinations are easy to set in Windows language preferences.
+
+In Ubuntu, a Gnome extension called Shyriiwook needs to be installed:
+
+```
+git clone https://github.com/madhead/shyriiwook.git
+cd shyriiwook
+make install
+gnome-extensions enable shyriiwook@madhead.me
+```
+
+After the extension is installed and activated, it should show the list of available keyboarrd layouts:
+
+```
+$ gdbus introspect --session --dest org.gnome.Shell --object-path /me/madhead/Shyriiwook --only-properties
+node /me/madhead/Shyriiwook {
+  interface me.madhead.Shyriiwook {
+    properties:
+      readonly as availableLayouts = ['us', 'ua'];
+      readonly s currentLayout = 'us';
+  };
+};
+```
+
+The following two commands would activate the Ukrainian and US layouts, correspondinigly:
+
+```
+gdbus call --session --dest org.gnome.Shell --object-path /me/madhead/Shyriiwook --method me.madhead.Shyriiwook.activate "ua"
+
+gdbus call --session --dest org.gnome.Shell --object-path /me/madhead/Shyriiwook --method me.madhead.Shyriiwook.activate "us"
+```
+
+Once it works, you can assign keyboard shortcuts to execute these
+commands. In Settings -> Keyboard -> Keyboard Shortcuts -> Custom
+Shortcuts, define the shortcuts as indicated above, to execute the
+Gnome extension calls.
+
+
+
+
+
 Firmware
 --------
 
