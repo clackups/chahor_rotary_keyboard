@@ -58,8 +58,8 @@ scrolled automatically at 3 letters per second.
 Switching between languages
 ---------------------------
 
-The firmware is preprogrammed with the following combinations for
-language switching:
+The firmware is preprogrammed to send the following combinations to
+the host for language switching:
 
 * US English: `Ctrl+Shift+1`
 * Ukrainian:  `Ctrl+Shift+4`
