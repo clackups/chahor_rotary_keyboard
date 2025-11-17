@@ -208,3 +208,11 @@ pub const KEYMAP_PRELUDES: [(bool, u8, KU); 4] = [
     (true, 0b0000_0011, KU::Keyboard1Exclamation),  // US English digits and symbols: Ctrl+Shift+1
     (false, 0b0000_0000, KU::KeyboardErrorUndefined),  // F keys
 ];
+
+// we show the title shortly after switching to the layer
+pub const KEYMAP_TITLES: [[char; 3]; 4] = [
+    ['E', 'n', 'g'],
+    ['\u{0423}', '\u{043a}', '\u{0440}'],
+    ['1', '2', '3'],
+    ['F', 'n', '\u{0000}'],
+];

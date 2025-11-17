@@ -297,6 +297,9 @@ async fn core0_task(rotary_enc: RotaryEncResources, buttons: ButtonResources,
                         };
                         send_report_to_writer(&mut hid_writer, &report).await;
                     }
+
+                    CHANNEL.send(DisplayMessage::ShowChars(keymaps::KEYMAP_TITLES[keymap_n])).await;
+                    Timer::after_millis(SWITCH_LAYER_TITLE_DISPLAY_MS).await;
                     updated = true;
                 }
                 else if special_ks_button_down {
