@@ -15,17 +15,17 @@ assign_resources! {
         sda: PIN_8,
     }
     rotary_enc: RotaryEncResources {
-        pin_a: PIN_21,
-        pin_b: PIN_20,
+        pin_a: PIN_12,
+        pin_b: PIN_13,
     }
     buttons: ButtonResources {
-        navi_up:      PIN_18,
-        navi_down:    PIN_19,
         lower_case:   PIN_2,
         upper_case:   PIN_3,
         space:        PIN_4,
         bcksp:        PIN_5,
         ctrl:         PIN_6,
         switch:       PIN_7,
+        navi_up:      PIN_10,
+        navi_down:    PIN_11,
     }
 }

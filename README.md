@@ -108,6 +108,9 @@ Gnome extension calls.
 Firmware
 --------
 
+The firmawe is tested with RP2040, using Waveshare RP2040-Tiny for
+production, and RP2040 Pico for development.
+
 The firmware is written in Rust and it needs the following preparation
 steps. The following instructions are suitable for ubuntu or Debian.
 
