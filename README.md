@@ -111,6 +111,8 @@ Firmware
 The firmware is written in Rust and it needs the following preparation
 steps. The following instructions are suitable for ubuntu or Debian.
 
+Environment preparation:
+
 ```
 # the firmware build user needs to belong to the plugdev group in
 # order to be able to upload the firmware to the board.
@@ -128,31 +130,43 @@ sudo udevadm trigger
 # Follow the instructions at https://rustup.rs/ and install Rust:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# re-login so that environment variables and plugdev group membership take effect 
+# re-login so that environment variables and plugdev group membership take effect
 
 # Add the rp2040 compiler support:
 rustup target add thumbv6m-none-eabi
 
-# install probe-rs
+# install probe-rs (only if debugger board is used)
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/probe-rs/probe-rs/releases/latest/download/probe-rs-tools-installer.sh | sh
+
+# install cargo-make
+cargo install cargo-make
 
 # get the firmware code
 git clone https://github.com/clackups/chahor_rotary_keyboard.git
 cd chahor_rotary_keyboard/firmware/
+```
 
+If you need to develop and debug the firmware, it is recommended to
+use two RP2040 Pico boards: one will run the Chahor firmware, and the
+other will be used as a debug probe. See the [instructions for the
+probe](https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html)
+for more details.
+
+With the debugger connected, use the following commands to compile and upload the firmware:
+
+```
 # compile the firmware
-cargo build --features chahor_v1
+cargo make build-dev
+
+# compile and upload the firmware, using the debug board
+cargo make run-dev
 ```
 
-The keyboard is equipped with an rp2040 debugger board: one more
-rp2040 Pico that is initialized with the [debugger
-firmware](https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html).
-
-Connect the keyboard USB port and the debugger USB port to your Linux PC, then load the firmware:
+If you only need to upload a new version of the firmware, boot the
+RP2040 board while the BOOT button is pressed, then
 
 ```
-cd chahor_rotary_keyboard/firmware/
-cargo run --features chahor_v1
+cargo make rr
 ```
 
 If the load is successful, the keyboard is ready for work. You may

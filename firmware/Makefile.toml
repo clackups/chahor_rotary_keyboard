@@ -1,0 +1,19 @@
+[tasks.install-elf2uf2-rs]
+install_crate = { crate_name = "elf2uf2-rs" }
+
+[tasks.build-dev]
+command = "cargo"
+args = ["build", "--features", "chahor_v1"]
+
+[tasks.run-dev]
+command = "cargo"
+args = ["run", "--features", "chahor_v1"]
+
+
+[tasks.upload-release]
+command = "cargo"
+args = ["run", "--release", "--features", "chahor_v1", "--config", "target.thumbv6m-none-eabi.runner = 'elf2uf2-rs -d'"]
+dependencies = ["install-elf2uf2-rs"]
+
+[tasks.rr]
+alias = "upload-release"
