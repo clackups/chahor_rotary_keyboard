@@ -1,5 +1,7 @@
 // code borrowed from https://github.com/Krizsi96/keypad-hid
 
+use crate::boards;
+
 use core::sync::atomic::{AtomicBool, Ordering};
 use defmt::info;
 use embassy_rp::peripherals::USB;
@@ -66,9 +68,9 @@ impl Config<'_> {
     pub const fn new() -> Self {
         // Create embassy-usb config
         let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
-        config.manufacturer = Some("Embassy");
-        config.product = Some("HID keyboard example");
-        config.serial_number = Some("12345678");
+        config.manufacturer = Some("clackups");
+        config.product = Some(boards::USB_PRODUCT);
+        config.serial_number = Some(boards::USB_SERIAL);
 
         Self {
             embassy_config: config,

@@ -7,6 +7,12 @@ use assign_resources::assign_resources;
 use embassy_rp::Peri;
 use embassy_rp::peripherals;
 
+
+#[cfg(feature = "chahor_v1")]
+pub const USB_PRODUCT: &str = "chahor_v1";
+pub const USB_SERIAL: &str = "0001";
+
+
 #[cfg(feature = "chahor_v1")]
 assign_resources! {
     screen: ScreenResources {
@@ -29,3 +35,5 @@ assign_resources! {
         navi_down:    PIN_11,
     }
 }
+
+
