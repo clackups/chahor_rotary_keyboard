@@ -177,7 +177,38 @@ disconnect the debugger cable until you need to load the firmnmware
 again.
 
 
+Assembly
+--------
 
+Bill of material:
+
+* [Waveshare RP2040-Tiny](https://www.waveshare.com/rp2040-tiny.htm)
+
+* 8 low-profile MX keyboard switches
+
+* 8 low-profile keyboard keycaps
+
+* 24-pulse [rotary encoder by Adafruit](https://www.adafruit.com/product/377)
+
+* 0.96" OLED screen with i2c interface by [Lilygo or the like](https://lilygo.cc/products/0-96-inch-oled)
+
+* 8 M2*8mm screws and nuts
+
+* 4 M2*16mm screws and nuts
+
+* 0.9mm single-core copper wire
+
+* connecting wires
+
+3D printing models for the body and the bottom plate are [available in 3D_Print folder](3D_Print/), alongside with FreeCad models.
+
+KiCad schematics source and the PDF are available in [KiCad folder](KiCad/).
+
+![Top view](img/x_IMG_20251122_225757570.jpg)
+
+![Wiring top view](img/x_IMG_20251122_224007982.jpg)
+
+![Wiring side view](img/x_IMG_20251122_224017734.jpg)
 
 
 ## Copyright and license
