@@ -427,6 +427,7 @@ async fn core0_task(rotary_enc: RotaryEncResources, buttons: ButtonResources,
                     keycodes: [special_ks as u8, 0, 0, 0, 0, 0],
                 };
                 send_report_to_writer(&mut hid_writer, &report).await;
+                special_ks = KU::KeyboardErrorUndefined;
             }
 
             // send Key Release report
