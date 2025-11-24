@@ -11,9 +11,10 @@ use embassy_rp::peripherals;
 #[cfg(feature = "chahor_v1")]
 pub const USB_PRODUCT: &str = "chahor_v1";
 pub const USB_SERIAL: &str = "0001";
+// applied for a PID at https://pid.codes
+pub const USB_VID: u16 = 0x1209;
+pub const USB_PID: u16 = 0xBBD0;
 
-
-#[cfg(feature = "chahor_v1")]
 assign_resources! {
     screen: ScreenResources {
         peri: I2C0,

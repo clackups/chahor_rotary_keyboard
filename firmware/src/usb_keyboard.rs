@@ -67,7 +67,7 @@ pub struct Config<'a> {
 impl Config<'_> {
     pub const fn new() -> Self {
         // Create embassy-usb config
-        let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
+        let mut config = embassy_usb::Config::new(boards::USB_VID, boards::USB_PID);
         config.manufacturer = Some("clackups");
         config.product = Some(boards::USB_PRODUCT);
         config.serial_number = Some(boards::USB_SERIAL);
