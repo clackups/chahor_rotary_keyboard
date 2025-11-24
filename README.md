@@ -200,6 +200,8 @@ Bill of material:
 
 * connecting wires
 
+* 4 round self-adhesive silicone bumpers, 12mm
+
 3D printing models for the body and the bottom plate are [available in 3D_Print folder](3D_Print/), alongside with FreeCad models.
 
 KiCad schematics source and the PDF are available in [KiCad folder](KiCad/).
@@ -209,6 +211,9 @@ KiCad schematics source and the PDF are available in [KiCad folder](KiCad/).
 ![Wiring top view](img/x_IMG_20251122_224007982.jpg)
 
 ![Wiring side view](img/x_IMG_20251122_224017734.jpg)
+
+![Bottom view](img/x_IMG_20251124_074103069.jpg)
+
 
 
 ## Copyright and license
