@@ -22,8 +22,8 @@ assign_resources! {
         sda: PIN_8,
     }
     rotary_enc: RotaryEncResources {
-        pin_a: PIN_12,
-        pin_b: PIN_13,
+        pin_a: PIN_13,
+        pin_b: PIN_12,
     }
     buttons: ButtonResources {
         lower_case:   PIN_2,
